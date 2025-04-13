@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>School Fees App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .admin-panel { display: none; }
+  </style>
+</head>
+<body class="bg-light">
+
+<div class="container py-4" id="login-section">
+  <h3 class="text-center mb-4">School Fees Login</h3>
+  <input type="text" id="username" class="form-control mb-2" placeholder="Username">
+  <input type="password" id="password" class="form-control mb-2" placeholder="Password">
+  <button class="btn btn-primary w-100" onclick="login()">Login</button>
+</div>
+
+<div class="container py-4 d-none" id="dashboard">
+  <h3 class="text-center mb-3">Fees Dashboard</h3>
+
+  <div class="mb-3 row">
+    <div class="col"><input type="text" id="name" class="form-control" placeholder="Student Name"></div>
+    <div class="col"><input type="text" id="class" class="form-control" placeholder="Class"></div>
+    <div class="col"><input type="number" id="amount" class="form-control" placeholder="Amount"></div>
+    <div class="col"><button class="btn btn-success w-100" onclick="create()">Add Fee</button></div>
+  </div>
+
+  <div class="mb-3 row">
+    <div class="col-10"><input type="text" id="search" class="form-control" placeholder="Search..."></div>
+    <div class="col-2"><button class="btn btn-secondary w-100" onclick="search()">Search</button></div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-bordered table-hover">
+      <thead class="table-dark">
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Class</th>
+          <th>Amount</th>
+          <th>Date</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="feeTable"></tbody>
+    </table>
+  </div>
+
+  <div class="alert alert-info mt-3">
+    Total Fees Collected: ₦<span id="totalAmount">0</span>
+  </div>
+
+  <div class="admin-panel mt-4">
+    <h5>Admin Panel</h5>
+    <!-- Add admin-only controls here -->
+  </div>
+</div>
+
+<script>
+  const scriptURL = 'https://script.google.com/macros/s/AKfycbyELaJNpsLhFmsqH6S668WIr7f9iyPMobfytPlWAPEO3zYDg7E-wQdq6Be6Bhpb57zo/exec';
+
+  let isAdmin = false;
+
+  function login() {
+    const user = document.getElementById('username').value;
+    const pass = document.getElementById('password').value;
+
+    if ((user === "admin" && pass === "admin123") || (user === "staff" && pass === "staff123")) {
+      document.getElementById('login-section').classList.add('d-none');
+      document.getElementById('dashboard').classList.remove('d-none');
+      isAdmin = user === "admin";
+      if (isAdmin) document.querySelector('.admin-panel').style.display = 'block';
+      read();
+    } else {
+      alert("Invalid login");
+    }
+  }
+
+  function create() {
+    const name = document.getElementById('name').value;
+    const studentClass = document.getElementById('class').value;
+    const amount = document.getElementById('amount').value;
+
+    fetch(scriptURL, {
+      method: 'POST',
+      body: new URLSearchParams({ action: 'create', name, class: studentClass, amount })
+    }).then(() => {
+      read();
+      document.getElementById('name').value = '';
+      document.getElementById('class').value = '';
+      document.getElementById('amount').value = '';
+    });
+  }
+
+  function read() {
+    fetch(scriptURL, {
+      method: 'POST',
+      body: new URLSearchParams({ action: 'read' })
+    })
+    .then(res => res.text())
+    .then(text => {
+      const data = JSON.parse(text);
+      const table = document.getElementById('feeTable');
+      let rows = '', total = 0;
+
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        total += parseFloat(row[3]);
+        rows += `<tr>
+          <td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td><td>${row[3]}</td><td>${new Date(row[4]).toLocaleString()}</td>
+          <td>
+            ${isAdmin ? `<button class="btn btn-sm btn-danger" onclick="del('${row[0]}')">Delete</button>
+                         <button class="btn btn-sm btn-warning" onclick="edit('${row[0]}','${row[1]}','${row[2]}','${row[3]}')">Edit</button>` : ''}
+          </td>
+        </tr>`;
+      }
+
+      table.innerHTML = rows;
+      document.getElementById('totalAmount').innerText = total.toFixed(2);
+    });
+  }
+
+  function del(id) {
+    fetch(scriptURL, {
+      method: 'POST',
+      body: new URLSearchParams({ action: 'delete', id })
+    }).then(() => read());
+  }
+
+  function edit(id, name, className, amount) {
+    document.getElementById('name').value = name;
+    document.getElementById('class').value = className;
+    document.getElementById('amount').value = amount;
+
+    const btn = document.querySelector('button[onclick="create()"]');
+    btn.textContent = "Update Fee";
+    btn.onclick = function () {
+      fetch(scriptURL, {
+        method: 'POST',
+        body: new URLSearchParams({ action: 'update', id, name: document.getElementById('name').value, class: document.getElementById('class').value, amount: document.getElementById('amount').value })
+      }).then(() => {
+        read();
+        btn.textContent = "Add Fee";
+        btn.onclick = create;
+        document.getElementById('name').value = '';
+        document.getElementById('class').value = '';
+        document.getElementById('amount').value = '';
+      });
+    };
+  }
+
+  function search() {
+    const keyword = document.getElementById('search').value;
+    fetch(scriptURL, {
+      method: 'POST',
+      body: new URLSearchParams({ action: 'search', keyword })
+    })
+    .then(res => res.text())
+    .then(text => {
+      const data = JSON.parse(text);
+      const table = document.getElementById('feeTable');
+      let rows = '';
+      data.forEach(row => {
+        rows += `<tr><td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td><td>${row[3]}</td><td>${new Date(row[4]).toLocaleString()}</td><td></td></tr>`;
+      });
+      table.innerHTML = rows;
+    });
+  }
+</script>
+</body>
+</html>
